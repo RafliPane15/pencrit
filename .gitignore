@@ -1,0 +1,7 @@
+/test_images
+# Ignore all files in the Dataset folder
+/Dataset/*
+
+# Exclude readme.md
+!/Dataset/readme.md
+__pycache__
