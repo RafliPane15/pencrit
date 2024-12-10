@@ -5,3 +5,8 @@
 # Exclude readme.md
 !/Dataset/readme.md
 __pycache__
+
+/runs/*.pt
+/runs/train
+/runs/detect
+/wandb
