@@ -13,6 +13,7 @@ import os
 import random
 import sys
 import time
+import cv2
 from copy import deepcopy
 from pathlib import Path
 
@@ -52,6 +53,16 @@ LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
+def edge_detection(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, threshold1=50, threshold2=150)
+    return edges
+
+def process_edges(image_path):
+    images = cv2.imread(image_path)
+    edges = edge_detection(images)
+    edges = edges[..., None]
+    return edges
 
 def train(hyp,  # path/to/hyp.yaml or hyp dictionary
           opt,
@@ -117,7 +128,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
-        model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg, ch=1, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
 
     # Freeze
     freeze = [f'model.{x}.' for x in range(freeze)]  # layers to freeze
