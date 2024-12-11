@@ -26,6 +26,42 @@ from utils.general import check_img_size, check_requirements, check_imshow, colo
 from utils.plots import Annotator, colors
 from utils.torch_utils import select_device, load_classifier, time_sync
 
+def preprocess_with_edge_detection(imgs):
+    """
+    Preprocess images with edge detection, keeping the shape consistent.
+    Args:
+        imgs (torch.Tensor): Batch of images as a tensor with shape (N, C, H, W).
+    Returns:
+        torch.Tensor: Batch of edge-detected images with shape (N, C, H, W).
+    """
+    preprocessed_imgs = []
+    for img in imgs:
+        # Convert tensor to numpy (C, H, W) -> (H, W, C)
+        img_np = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        # Apply edge detection
+        edges = edge_detection(img_np)
+        # Convert back to tensor and permute to (C, H, W)
+        edges_tensor = torch.tensor(edges).permute(2, 0, 1)
+        preprocessed_imgs.append(edges_tensor)
+    # Stack tensors into a batch
+    return torch.stack(preprocessed_imgs).float().to(imgs.device)
+
+def edge_detection(img):
+    """
+    Apply edge detection to an image.
+    Args:
+        img (np.ndarray): Input image in shape (H, W, C) or (H, W).
+    Returns:
+        np.ndarray: Edge-detected image in shape (H, W, C).
+    """
+    # Convert to grayscale if input has 3 channels (RGB/BGR)
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Apply Canny edge detection
+    edges = cv2.Canny(img, threshold1=100, threshold2=200)
+    # Expand edges to 3 channels (H, W) -> (H, W, C)
+    edges = np.stack([edges, edges, edges], axis=-1)
+    return edges
 
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
@@ -59,7 +95,9 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
+    edge_save_dir = save_dir / 'edges'
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
+    edge_save_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize
     set_logging()
@@ -132,6 +170,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         if len(img.shape) == 3:
             img = img[None]  # expand for batch dim
 
+        # Preprocess images with edge detection
+        edge_tensor = preprocess_with_edge_detection(img)
+        edge_np = edge_tensor[0].permute(1, 2, 0).cpu().numpy()  # Convert back to numpy for saving
+
         # Inference
         t1 = time_sync()
         if pt:
@@ -178,6 +220,11 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
+
+            # Save edge-detected image
+            edge_save_path = str(edge_save_dir / p.name)
+            cv2.imwrite(edge_save_path, edge_np)
+
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
